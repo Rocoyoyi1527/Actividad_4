@@ -1,0 +1,57 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [16.x, 18.x]
+
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v3
+
+    - name: Configurar Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    - name: Instalar dependencias
+      run: npm ci
+
+    - name: Ejecutar pruebas
+      run: npm test
+      env:
+        JWT_SECRET: test_secret_key_for_ci
+        MONGODB_URI: mongodb://localhost:27017/test_db
+
+    - name: Verificar cobertura de código
+      run: npm test -- --coverage --coverageReporters=text-lcov | npx coveralls || true
+      env:
+        JWT_SECRET: test_secret_key_for_ci
+        MONGODB_URI: mongodb://localhost:27017/test_db
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v3
+
+    - name: Deploy to Vercel
+      uses: amondnet/vercel-action@v20
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+        vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+        vercel-args: '--prod'
